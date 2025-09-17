@@ -408,10 +408,9 @@ async function downloadNovel(
 		delayMs,
 	});
 	
-	// 일시정지 상태 관리
+	// 단순화된 일시정지 상태 관리
 	let isPaused = false;
-	let pauseResolve = null;
-	let currentIndex = 0;
+	let shouldPause = false;
 	// 저장 옵션 선택을 위한 최신 대화 상자 생성
 	const dialog = document.createElement("div");
 	Object.assign(dialog.style, {
@@ -635,6 +634,8 @@ async function downloadNovel(
 			detailedProgress,
 		} = createModal(`"${title}" 다운로드 중`, { value: true });
 		
+		// 안정성을 위한 에러 핸들링 추가
+		try {
 		// 일시정지/재개 버튼 추가
 		const pauseResumeButton = document.createElement("button");
 		pauseResumeButton.textContent = "일시정지";
@@ -661,19 +662,17 @@ async function downloadNovel(
 			pauseResumeButton.style.backgroundColor = isPaused ? "#4caf50" : "#ff9800";
 		};
 		
-		// 일시정지/재개 기능
+		// 단순화된 일시정지/재개 기능
 		pauseResumeButton.onclick = () => {
 			if (isPaused) {
 				isPaused = false;
+				shouldPause = false;
 				pauseResumeButton.textContent = "일시정지";
 				pauseResumeButton.style.backgroundColor = "#ff9800";
 				statusElement.textContent = "다운로드 재개됨...";
-				if (pauseResolve) {
-					pauseResolve();
-					pauseResolve = null;
-				}
 			} else {
 				isPaused = true;
+				shouldPause = true;
 				pauseResumeButton.textContent = "재개";
 				pauseResumeButton.style.backgroundColor = "#4caf50";
 				statusElement.textContent = "다운로드 일시정지됨 (재개 버튼을 눌러주세요)";
@@ -697,27 +696,26 @@ async function downloadNovel(
 		statusElement.textContent = "다운로드를 준비하는 중...";
 
 		for (let i = startingIndex; i >= endingIndex; i--) {
-			currentIndex = i;
-			
 			// 53페이지마다 자동 일시정지 (53화마다)
 			if (completedEpisodes > 0 && completedEpisodes % 53 === 0) {
 				isPaused = true;
+				shouldPause = true;
 				pauseResumeButton.textContent = "재개";
 				pauseResumeButton.style.backgroundColor = "#4caf50";
 				statusElement.textContent = `⚠️ 53화 완료! 자동 일시정지됨 (재개 버튼을 눌러주세요)`;
 				console.log(`[downloadNovel] 53화 완료로 인한 자동 일시정지`);
-				
-				// 일시정지 상태에서 대기
-				await new Promise((resolve) => {
-					pauseResolve = resolve;
-				});
 			}
 			
-			// 수동 일시정지 상태 확인
-			while (isPaused) {
-				await new Promise((resolve) => {
-					pauseResolve = resolve;
-				});
+			// 안전한 일시정지 상태 확인 (타임아웃 추가)
+			let pauseTimeout = 0;
+			while (isPaused && pauseTimeout < 1000) { // 최대 100초 대기
+				await new Promise((resolve) => setTimeout(resolve, 100));
+				pauseTimeout++;
+			}
+			if (pauseTimeout >= 1000) {
+				console.warn("[downloadNovel] 일시정지 타임아웃, 자동 재개");
+				isPaused = false;
+				shouldPause = false;
 			}
 			
 			const episodeUrl = episodeLinks[i];
@@ -732,7 +730,14 @@ async function downloadNovel(
 			const episodeNumber = episodeLinks.length - i;
 			statusElement.textContent = `${episodeNumber}화 다운로드 중... (${currentEpisode}/${totalEpisodes})`;
 
-			let result = await fetchNovelContent(episodeUrl);
+			let result = null;
+			try {
+				result = await fetchNovelContent(episodeUrl);
+			} catch (fetchError) {
+				console.error(`[downloadNovel] fetchNovelContent 오류: ${fetchError.message}`);
+				result = null;
+			}
+			
 			if (!result) {
 				captchaCount++;
 				statusElement.textContent = `⚠️ CAPTCHA 감지됨! ${episodeNumber}화를 처리할 수 없습니다.`;
@@ -993,6 +998,11 @@ async function downloadNovel(
 			completionDialog.appendChild(completionContent);
 			document.body.appendChild(completionDialog);
 		}, 500);
+		} catch (error) {
+			console.error("[downloadNovel] 다운로드 중 오류 발생:", error);
+			statusElement.textContent = "❌ 다운로드 중 오류가 발생했습니다.";
+			alert(`다운로드 중 오류가 발생했습니다: ${error.message}`);
+		}
 	}
 }
 
