@@ -319,7 +319,6 @@ function createModal(title, isBusyRef) {
 		progressBar,
 		detailedProgress,
 		closeButton,
-		header,
 	};
 }
 
@@ -409,9 +408,7 @@ async function downloadNovel(
 		delayMs,
 	});
 	
-	// 단순화된 일시정지 상태 관리
-	let isPaused = false;
-	let shouldPause = false;
+		// script.txt와 동일한 구조
 	// 저장 옵션 선택을 위한 최신 대화 상자 생성
 	const dialog = document.createElement("div");
 	Object.assign(dialog.style, {
@@ -633,61 +630,9 @@ async function downloadNovel(
 			timeRemaining,
 			progressBar,
 			detailedProgress,
-			header,
 		} = createModal(`"${title}" 다운로드 중`, { value: true });
 		
-		// 안정성을 위한 에러 핸들링 추가
-		try {
-		// 일시정지/재개 버튼 추가
-		const pauseResumeButton = document.createElement("button");
-		pauseResumeButton.textContent = "일시정지";
-		Object.assign(pauseResumeButton.style, {
-			position: "absolute",
-			top: "16px",
-			right: "60px",
-			backgroundColor: "#ff9800",
-			color: "white",
-			border: "none",
-			padding: "8px 16px",
-			borderRadius: "6px",
-			fontSize: "12px",
-			fontWeight: "500",
-			cursor: "pointer",
-			transition: "background-color 0.2s",
-		});
-		
-		pauseResumeButton.onmouseover = () => {
-			pauseResumeButton.style.backgroundColor = "#f57c00";
-		};
-		
-		pauseResumeButton.onmouseout = () => {
-			pauseResumeButton.style.backgroundColor = isPaused ? "#4caf50" : "#ff9800";
-		};
-		
-		// 단순화된 일시정지/재개 기능
-		pauseResumeButton.onclick = () => {
-			if (isPaused) {
-				isPaused = false;
-				shouldPause = false;
-				pauseResumeButton.textContent = "일시정지";
-				pauseResumeButton.style.backgroundColor = "#ff9800";
-				statusElement.textContent = "다운로드 재개됨...";
-			} else {
-				isPaused = true;
-				shouldPause = true;
-				pauseResumeButton.textContent = "재개";
-				pauseResumeButton.style.backgroundColor = "#4caf50";
-				statusElement.textContent = "다운로드 일시정지됨 (재개 버튼을 눌러주세요)";
-			}
-		};
-		
-		// 모달 헤더에 버튼 추가
-		if (header) {
-			header.style.position = "relative";
-			header.appendChild(pauseResumeButton);
-		} else {
-			console.warn("[downloadNovel] 모달 헤더를 찾을 수 없습니다. 일시정지 버튼을 추가할 수 없습니다.");
-		}
+		// script.txt와 동일한 구조로 단순화
 
 		document.body.appendChild(modal);
 
@@ -701,27 +646,6 @@ async function downloadNovel(
 		statusElement.textContent = "다운로드를 준비하는 중...";
 
 		for (let i = startingIndex; i >= endingIndex; i--) {
-			// 53페이지마다 자동 일시정지 (53화마다)
-			if (completedEpisodes > 0 && completedEpisodes % 53 === 0) {
-				isPaused = true;
-				shouldPause = true;
-				pauseResumeButton.textContent = "재개";
-				pauseResumeButton.style.backgroundColor = "#4caf50";
-				statusElement.textContent = `⚠️ 53화 완료! 자동 일시정지됨 (재개 버튼을 눌러주세요)`;
-				console.log(`[downloadNovel] 53화 완료로 인한 자동 일시정지`);
-			}
-			
-			// 안전한 일시정지 상태 확인 (타임아웃 추가)
-			let pauseTimeout = 0;
-			while (isPaused && pauseTimeout < 1000) { // 최대 100초 대기
-				await new Promise((resolve) => setTimeout(resolve, 100));
-				pauseTimeout++;
-			}
-			if (pauseTimeout >= 1000) {
-				console.warn("[downloadNovel] 일시정지 타임아웃, 자동 재개");
-				isPaused = false;
-				shouldPause = false;
-			}
 			
 			const episodeUrl = episodeLinks[i];
 			console.log(`[downloadNovel] ${i}번째 에피소드 URL:`, episodeUrl);
@@ -783,9 +707,15 @@ async function downloadNovel(
 			completedEpisodes++;
 			const stats = progressTracker.update(completedEpisodes);
 
-			progressBar.style.width = `${stats.progress}%`;
-			progressText.textContent = `${stats.progress}%`;
-			timeRemaining.textContent = `남은 시간: ${stats.remaining}`;
+			if (progressBar && progressBar.style) {
+				progressBar.style.width = `${stats.progress}%`;
+			}
+			if (progressText) {
+				progressText.textContent = `${stats.progress}%`;
+			}
+			if (timeRemaining) {
+				timeRemaining.textContent = `남은 시간: ${stats.remaining}`;
+			}
 
 			detailedProgress.innerHTML = `
                 <div style="margin-bottom: 4px; display: flex; justify-content: center; gap: 12px;">
@@ -805,9 +735,15 @@ async function downloadNovel(
 			failedEpisodes,
 			captchaCount,
 		});
-		statusElement.textContent = "✅ 다운로드 완료, 파일 생성 중...";
-		progressBar.style.width = "100%";
-		progressText.textContent = "100%";
+		if (statusElement) {
+			statusElement.textContent = "✅ 다운로드 완료, 파일 생성 중...";
+		}
+		if (progressBar && progressBar.style) {
+			progressBar.style.width = "100%";
+		}
+		if (progressText) {
+			progressText.textContent = "100%";
+		}
 
 		setTimeout(() => {
 			console.log("[downloadNovel] 파일 생성 및 다운로드 버튼 표시");
@@ -1003,11 +939,7 @@ async function downloadNovel(
 			completionDialog.appendChild(completionContent);
 			document.body.appendChild(completionDialog);
 		}, 500);
-		} catch (error) {
-			console.error("[downloadNovel] 다운로드 중 오류 발생:", error);
-			statusElement.textContent = "❌ 다운로드 중 오류가 발생했습니다.";
-			alert(`다운로드 중 오류가 발생했습니다: ${error.message}`);
-		}
+		// script.txt와 동일한 구조로 단순화 완료
 	}
 }
 
