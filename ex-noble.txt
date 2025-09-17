@@ -319,6 +319,7 @@ function createModal(title, isBusyRef) {
 		progressBar,
 		detailedProgress,
 		closeButton,
+		header,
 	};
 }
 
@@ -632,6 +633,7 @@ async function downloadNovel(
 			timeRemaining,
 			progressBar,
 			detailedProgress,
+			header,
 		} = createModal(`"${title}" 다운로드 중`, { value: true });
 		
 		// 안정성을 위한 에러 핸들링 추가
@@ -680,9 +682,12 @@ async function downloadNovel(
 		};
 		
 		// 모달 헤더에 버튼 추가
-		const modalHeader = modal.querySelector("div[style*='backgroundColor: #f9f9fb']");
-		modalHeader.style.position = "relative";
-		modalHeader.appendChild(pauseResumeButton);
+		if (header) {
+			header.style.position = "relative";
+			header.appendChild(pauseResumeButton);
+		} else {
+			console.warn("[downloadNovel] 모달 헤더를 찾을 수 없습니다. 일시정지 버튼을 추가할 수 없습니다.");
+		}
 
 		document.body.appendChild(modal);
 
