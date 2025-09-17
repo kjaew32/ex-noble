@@ -400,12 +400,14 @@ async function downloadNovel(
 	startEpisode,
 	endEpisode,
 	delayMs = 5000,
+	pauseInterval = 53,
 ) {
 	console.log("[downloadNovel] 시작", {
 		title,
 		startEpisode,
 		endEpisode,
 		delayMs,
+		pauseInterval,
 	});
 	
 		// script.txt와 동일한 구조
@@ -632,7 +634,49 @@ async function downloadNovel(
 			detailedProgress,
 		} = createModal(`"${title}" 다운로드 중`, { value: true });
 		
-		// script.txt와 동일한 구조로 단순화
+		// 간단한 일시정지 버튼 추가
+		const pauseResumeButton = document.createElement("button");
+		pauseResumeButton.textContent = "일시정지";
+		Object.assign(pauseResumeButton.style, {
+			position: "absolute",
+			top: "16px",
+			right: "60px",
+			backgroundColor: "#ff9800",
+			color: "white",
+			border: "none",
+			padding: "8px 16px",
+			borderRadius: "6px",
+			fontSize: "12px",
+			fontWeight: "500",
+			cursor: "pointer",
+			transition: "background-color 0.2s",
+		});
+
+		// 일시정지 상태 관리
+		let isPaused = false;
+
+		pauseResumeButton.onclick = () => {
+			isPaused = !isPaused;
+			if (isPaused) {
+				pauseResumeButton.textContent = "재개";
+				pauseResumeButton.style.backgroundColor = "#4caf50";
+				statusElement.textContent = "다운로드 일시정지됨 (재개 버튼을 눌러주세요)";
+			} else {
+				pauseResumeButton.textContent = "일시정지";
+				pauseResumeButton.style.backgroundColor = "#ff9800";
+				statusElement.textContent = "다운로드 재개됨...";
+			}
+		};
+
+		// 모달 헤더에 버튼 추가
+		const modalHeader = modal.querySelector("div[style*='background-color: rgb(249, 249, 251)']") || 
+		                   modal.querySelector("div[style*='backgroundColor: #f9f9fb']") ||
+		                   modal.querySelector("div[style*='background-color: #f9f9fb']");
+		
+		if (modalHeader) {
+			modalHeader.style.position = "relative";
+			modalHeader.appendChild(pauseResumeButton);
+		}
 
 		document.body.appendChild(modal);
 
@@ -646,6 +690,18 @@ async function downloadNovel(
 		statusElement.textContent = "다운로드를 준비하는 중...";
 
 		for (let i = startingIndex; i >= endingIndex; i--) {
+			// 사용자 정의 간격마다 자동 일시정지
+			if (pauseInterval > 0 && completedEpisodes > 0 && completedEpisodes % pauseInterval === 0) {
+				isPaused = true;
+				pauseResumeButton.textContent = "재개";
+				pauseResumeButton.style.backgroundColor = "#4caf50";
+				statusElement.textContent = `⚠️ ${pauseInterval}화 완료! 자동 일시정지됨 (재개 버튼을 눌러주세요)`;
+			}
+			
+			// 일시정지 상태 확인
+			while (isPaused) {
+				await new Promise((resolve) => setTimeout(resolve, 100));
+			}
 			
 			const episodeUrl = episodeLinks[i];
 			console.log(`[downloadNovel] ${i}번째 에피소드 URL:`, episodeUrl);
@@ -1503,6 +1559,23 @@ async function runCrawler() {
 		delayInput.input.style.border = "1px solid #ffcc00";
 		delayInput.input.style.backgroundColor = "#fffbf0";
 
+		// 일시정지 간격 입력
+		const pauseIntervalInput = createInputGroup(
+			"일시정지 간격 (화수)",
+			"number",
+			"53",
+			"일시정지 간격 입력",
+			"💡 지정한 화수마다 자동으로 일시정지됩니다. 0으로 설정하면 자동 일시정지가 비활성화됩니다.",
+			(value) => {
+				if (Number.isNaN(Number(value)) || Number(value) < 0) {
+					return "유효한 간격을 입력해주세요. (0 이상)";
+				}
+				return null;
+			},
+		);
+		rangeContent.appendChild(pauseIntervalInput.group);
+		pauseIntervalInput.input.min = 0;
+
 		// 범위 버튼
 		const rangeButtons = document.createElement("div");
 		Object.assign(rangeButtons.style, {
@@ -1658,13 +1731,21 @@ async function runCrawler() {
 				return;
 			}
 
+			const pauseInterval = Number.parseInt(pauseIntervalInput.input.value, 10);
+			console.log("[runCrawler] 일시정지 간격 입력:", pauseInterval);
+			if (Number.isNaN(pauseInterval) || pauseInterval < 0) {
+				alert("유효한 일시정지 간격을 입력해주세요. (0 이상)");
+				console.log("[runCrawler] 잘못된 일시정지 간격 입력, 종료");
+				return;
+			}
+
 			document.body.removeChild(rangeDialog);
 
 			console.log(
-				`작업 추가됨: ${title} 다운로드 준비 중 (${startEpisode}화부터 ${endEpisode}화까지)`,
+				`작업 추가됨: ${title} 다운로드 준비 중 (${startEpisode}화부터 ${endEpisode}화까지, 일시정지 간격: ${pauseInterval}화)`,
 			);
 
-			downloadNovel(title, allEpisodeLinks, startEpisode, endEpisode, delay);
+			downloadNovel(title, allEpisodeLinks, startEpisode, endEpisode, delay, pauseInterval);
 		};
 
 		// 모달 append 후 첫 input에 focus, keydown으로 Tab/Shift+Tab, ESC 닫기 지원
