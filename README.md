@@ -1,3 +1,8 @@
 insert bookmark lit
 
-javascript:(async()=>{if(!location.hostname.match(/booktoki\d*\.com/)){alert("Bookkisite실행");return;}function sleep(ms){return new Promise(r=>setTimeout(r,ms));}async function getAllLinks(){let maxPage=1;let pgs=[...document.querySelectorAll(".pagination li")].map(li=>parseInt(li.innerText)).filter(n=>!isNaN(n));if(pgs.length)maxPage=Math.max(...pgs);let links=[];for(let p=1;p<=maxPage;p++){let url=new URL(location.href);url.searchParams.set("spage",p);let res=await fetch(url);let html=await res.text();let doc=new DOMParser().parseFromString(html,"text/html");let pageLinks=[...doc.querySelectorAll(".list-body .list-item a")];links.push(...pageLinks.map(a=>a.href));await sleep(200);}return links.reverse();}function parseRange(input,max){if(!input)return Array.from({length:max},(_,i)=>i+1);let parts=input.split(","),res=[];for(let p of parts){if(p.includes("-")){let[a,b]=p.split("-").map(Number);for(let i=a;i<=b;i++)res.push(i);}else res.push(Number(p));}return [...new Set(res)].filter(n=>n>0&&n<=max).sort((a,b)=>a-b);}let scriptUrl="https://raw.githubusercontent.com/username/repository-name/main/index.js";let scriptRes=await fetch(scriptUrl);let scriptText=await scriptRes.text();eval(scriptText);})();
+javascript:(async()=>{
+  let scriptUrl = "https://raw.githubusercontent.com/username/repository-name/main/index.js"; // GitHub Raw URL
+  let scriptRes = await fetch(scriptUrl);
+  let scriptText = await scriptRes.text();
+  eval(scriptText);
+})();
