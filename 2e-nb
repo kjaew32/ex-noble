@@ -1,0 +1,165 @@
+(async () => {
+  if (!location.hostname.match(/booktoki\d*\.com/)) {
+    alert("Booktoki 사이트에서 실행하세요");
+    return;
+  }
+
+  function sleep(ms) {
+    return new Promise(r => setTimeout(r, ms));
+  }
+
+  async function getAllLinks() {
+    let maxPage = 1;
+    let pgs = [...document.querySelectorAll(".pagination li")]
+      .map(li => parseInt(li.innerText))
+      .filter(n => !isNaN(n));
+
+    if (pgs.length) maxPage = Math.max(...pgs);
+
+    let links = [];
+    for (let p = 1; p <= maxPage; p++) {
+      let url = new URL(location.href);
+      url.searchParams.set("spage", p);
+      let res = await fetch(url);
+      let html = await res.text();
+      let doc = new DOMParser().parseFromString(html, "text/html");
+      let pageLinks = [...doc.querySelectorAll(".list-body .list-item a")];
+      links.push(...pageLinks.map(a => a.href));
+      await sleep(200);
+    }
+
+    return links.reverse();
+  }
+
+  function parseRange(input, max) {
+    if (!input) return Array.from({ length: max }, (_, i) => i + 1);
+    let parts = input.split(",");
+    let res = [];
+    for (let p of parts) {
+      p = p.trim();
+      if (!p) continue;
+      if (p.includes("-")) {
+        let [a, b] = p.split("-").map(Number);
+        if (isNaN(a) || isNaN(b)) continue;
+        if (a > b) [a, b] = [b, a];
+        for (let i = a; i <= b; i++) res.push(i);
+      } else {
+        let n = Number(p);
+        if (!isNaN(n)) res.push(n);
+      }
+    }
+    return [...new Set(res)]
+      .filter(n => n > 0 && n <= max)
+      .sort((a, b) => a - b);
+  }
+
+  // ===== UI 만들기 =====
+  let overlay = document.createElement("div");
+  overlay.style = "position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,.6);z-index:999999;display:flex;align-items:center;justify-content:center;";
+
+  let contentDiv = document.createElement("div");
+  contentDiv.style = "background:#fff;padding:20px;width:400px;border-radius:10px;font-family:sans-serif;";
+
+  let header = document.createElement("h3");
+  header.textContent = "Booktoki 전체 다운로더";
+  contentDiv.appendChild(header);
+
+  let description = document.createElement("p");
+  description.textContent = "다운로드할 범위 (예: 1500-1520, 1500,1502,1505)";
+  contentDiv.appendChild(description);
+
+  // 다운로드 범위 입력
+  let rangeInput = document.createElement("input");
+  rangeInput.id = "rangeInput";
+  rangeInput.style = "width:100%;padding:5px;margin-bottom:10px;";
+  rangeInput.placeholder = "전체면 비워두기";
+  contentDiv.appendChild(rangeInput);
+
+  // pauserange 비슷한 개념: N화마다 일시정지할 범위
+  let pauseLabel = document.createElement("p");
+  pauseLabel.textContent = "일시정지할 회차 범위 (예: 10,20,30 또는 10-50)";
+  contentDiv.appendChild(pauseLabel);
+
+  let pauseRangeInput = document.createElement("input");
+  pauseRangeInput.id = "pauseRangeInput";
+  pauseRangeInput.style = "width:100%;padding:5px;margin-bottom:10px;";
+  pauseRangeInput.placeholder = "사용 안 하면 비우기";
+  contentDiv.appendChild(pauseRangeInput);
+
+  let startBtn = document.createElement("button");
+  startBtn.id = "startBtn";
+  startBtn.style = "width:100%;padding:8px;";
+  startBtn.textContent = "다운로드 시작";
+  contentDiv.appendChild(startBtn);
+
+  let progress = document.createElement("div");
+  progress.id = "progress";
+  progress.style = "margin-top:10px;font-size:12px;white-space:pre-line;";
+  contentDiv.appendChild(progress);
+
+  let closeBtn = document.createElement("button");
+  closeBtn.id = "closeBtn";
+  closeBtn.style = "margin-top:10px;width:100%;";
+  closeBtn.textContent = "닫기";
+  contentDiv.appendChild(closeBtn);
+
+  overlay.appendChild(contentDiv);
+  document.body.appendChild(overlay);
+
+  closeBtn.onclick = () => overlay.remove();
+
+  startBtn.onclick = async () => {
+    let progress = document.getElementById("progress");
+    progress.innerText = "전체 목록 수집 중...";
+
+    let links = await getAllLinks();
+    let max = links.length;
+
+    let input = document.getElementById("rangeInput").value.trim();
+    let selected = parseRange(input, max);
+
+    if (!selected.length) {
+      alert("범위 오류");
+      return;
+    }
+
+    let pauseInput = document.getElementById("pauseRangeInput").value.trim();
+    let pausePoints = parseRange(pauseInput, max); // 예: [10,20,30]
+
+    let fullText = "";
+    for (let i = 0; i < selected.length; i++) {
+      let idx = selected[i];
+      progress.innerText = `읽는 중 ${i + 1}/${selected.length} (회차: ${idx})`;
+
+      let res = await fetch(links[idx - 1]);
+      let html = await res.text();
+      let doc = new DOMParser().parseFromString(html, "text/html");
+
+      let title = doc.querySelector(".toon-title")?.innerText || "";
+      let content = [...doc.querySelectorAll("#novel_content p")]
+        .map(p => p.innerText)
+        .join("\n");
+
+      fullText += `${idx}화 | ${title}\n\n${content}\n\n\n`;
+      await sleep(200);
+
+      // pauserange 비슷한 기능: 지정된 회차에 도달하면 일시정지
+      if (pausePoints.includes(idx)) {
+        let cont = confirm(`${idx}화까지 다운로드 완료.\n계속 진행할까요?`);
+        if (!cont) break;
+      }
+    }
+
+    if (!fullText) {
+      progress.innerText = "다운로드된 내용이 없습니다.";
+      return;
+    }
+
+    let blob = new Blob([fullText], { type: "text/plain;charset=utf-8;" });
+    let a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = document.title.replace(/[\\/:*?"<>|]/g, "") + ".txt";
+    a.click();
+    progress.innerText = "완료!";
+  };
+})();
